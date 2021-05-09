@@ -44,7 +44,7 @@ from qutip.tensor import tensor
 from qutip.states import fock_dm
 
 
-__all__ = ['rx', 'ry', 'rz', 'sqrtnot', 'snot', 'phasegate', 'qrot',
+__all__ = ['rx', 'ry', 'cr','rz', 'sqrtnot', 'snot', 'phasegate', 'qrot',
            'x_gate', 'y_gate', 'z_gate', 'cy_gate', 'cz_gate', 's_gate',
            't_gate', 'qasmu_gate', 'cs_gate', 'ct_gate', 'cphase', 'cnot',
            'csign', 'berkeley', 'swapalpha', 'swap', 'iswap', 'sqrtswap',
@@ -248,6 +248,22 @@ def ry(phi, N=None, target=0):
     return Qobj([[np.cos(phi / 2), -np.sin(phi / 2)],
                  [np.sin(phi / 2), np.cos(phi / 2)]])
 
+def cr(phi, N=None, control=0, target=1):
+    """Single-qubit rotation for operator sigmay with angle phi.
+
+    Returns
+    -------
+    result : qobj
+        Quantum object for operator describing the rotation.
+
+    """
+    if (control == 1 and target == 0) and N is None:
+        N = 2
+    if N is not None:
+        return gate_expand_1toN(cr(phi), N,control,target)
+    return Qobj([[np.cos(phi / 2), -1j*np.sin(phi / 2),0,0],
+                 [-1j*np.sin(phi / 2), np.cos(phi / 2),0,0],[0,0,np.cos(phi / 2), 1j*np.sin(phi / 2)],
+                 [0,0,1j*np.sin(phi / 2), np.cos(phi / 2)]],dims=[[2,2],[2,2]])
 
 def rz(phi, N=None, target=0):
     """Single-qubit rotation for operator sigmaz with angle phi.

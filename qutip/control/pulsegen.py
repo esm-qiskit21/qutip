@@ -46,7 +46,7 @@ See the class and gen_pulse function descriptions for details
 """
 
 import numpy as np
-
+from scipy import signal
 import qutip.logging_utils as logging
 logger = logging.get_logger()
 
@@ -112,6 +112,10 @@ def create_pulse_gen(pulse_type='RND', dyn=None, pulse_params=None):
         return PulseGenCrabFourier(dyn, params=pulse_params)
     elif pulse_type == 'GAUSSIAN_EDGE':  
         return PulseGenGaussianEdge(dyn, params=pulse_params)
+    elif pulse_type == 'CUSTOM':
+        return PulseGenGaussianSquare(dyn, params=pulse_params)
+    elif pulse_type == 'DRAG':
+        return PulseGenDrag(dyn, params=pulse_params)    
     else:
         raise ValueError("No option for pulse_type '{}'".format(pulse_type))
 
@@ -957,6 +961,212 @@ class PulseGenGaussianEdge(PulseGen):
 
         return self._apply_bounds_and_offset(pulse)
 
+class PulseGenGaussianSquare(PulseGen):
+    """
+    Generates pulses with a Gaussian profile
+    """
+    def reset(self):
+        super().reset()
+        """
+        reset attributes to default values
+        """
+        PulseGen.reset(self)
+        self._uses_time = True
+        #self.amp = 0.05*self.pulse_time
+        self.amp = 0.265
+        self.width = self.pulse_time/3.
+        self.variance = self.pulse_time/6.
+        #self.variance = 0.25*self.pulse_time
+        #self.width = 0.5*self.pulse_time
+
+        self.apply_params()
+
+   
+                
+        
+        
+    def gen_pulse(self, amp=None, variance=None, width=None):
+              
+       
+
+        if not self._pulse_initialised:
+            self.init_pulse()
+        
+        t = self.time
+        if amp:
+            Tm = amp
+        else:
+            Tm = self.amp
+        if variance:
+            Tv = variance
+        else:
+            Tv = self.variance
+        if width:
+        	Tw = width
+        else:
+            Tw = self.width	    
+        
+        Tm = 0.169#0.33046
+        T = self.pulse_time
+        dt = 0.222
+        t_start = 0.
+        t_stop = T
+        width = T/3 #1056 #T/3.
+        var = T/6.#64 #T/6.
+        risefall = (t_stop-width)*0.5  
+        t_rise = risefall
+        t_fall = risefall
+
+
+        def flattop_sinsq(t, t_start, t_stop, t_rise, t_fall):
+            if t_start <= t <= t_stop:
+                 f = 1.0
+                 if t <= t_start + t_rise:
+                     f = np.sin(np.pi * (t - t_start) / (2.0 * t_rise)) ** 2
+                 elif t >= t_stop - t_fall:
+                     f = np.sin(np.pi * (t - t_stop) / (2.0 * t_fall)) ** 2
+                 return f
+            else:
+                  return 0.0    
+       
+           
+           
+     
+       
+            
+               
+        pulse = np.empty(self.num_tslots)
+        t = t_start
+        for k in range(self.num_tslots):
+            
+            #y = Tm*sinsq_flattop(t,t_start,t_stop,t_rise,t_fall)
+            pulse[k] = self.scaling*Tm*flattop_sinsq(t,t_start,t_stop,t_rise,t_fall)
+            t = t + self.tau[k]
+        return self._apply_bounds_and_offset(pulse)    
+ 
+        
+
+
+
+
+class PulseGenDrag(PulseGen):
+        """
+        Generates the drag pulse as implemented in qiskit
+        """
+        def reset(self):
+            PulseGen.reset(self)
+            self._uses_time = True
+            self.mean = 0.5*self.pulse_time
+            self.variance = 0.25*self.pulse_time
+            self.beta = -0.001618
+            self.apply_params()
+        """
+        reset attributes to default values
+        """
+        
+
+        def gen_pulse(self, mean=None, variance=None,beta=None):
+            if not self._pulse_initialised:
+                self.init_pulse()
+            t = self.time
+            T = self.pulse_time     
+            if mean:
+                Tm = mean
+            else:
+                Tm = self.mean
+                
+                
+            if variance:
+                Tv = variance
+            
+            else:
+                Tv = self.variance
+            if beta:
+                b = beta
+            else:
+                b = self.beta
+                
+            #gaussian = np.exp(-(1/2)*((t-Tm/2)**2)/(Tv**2))
+            #pulse = self.scaling*gaussian+1j*b*(-(t-Tm/2)/Tv**2)*gaussian 
+            pulse = self.scaling*(np.exp(-(1/2)*((t-Tm)**2)/(Tv**2))+ \
+            	1j*b*(-(t-Tm)/Tv**2)*np.exp(-(1/2)*((t-Tm)**2)/(Tv**2)))
+            return self._apply_bounds_and_offset(pulse)     
+            #beta = -0.001618
+            """a = 0.08851 """   
+              
+            
+            """pulse = np.empty(self.num_tslots)
+            
+           
+            t_start = 0.
+            #t_stop = T
+            t = t_start
+            for k in range(self.num_tslots):
+                gaussian = np.exp(-(1/2)*((t-Tm/2)**2)/(Tv**2))
+                pulse[k]=self.scaling*gaussian+1j*b*(-(t-Tm/2)/Tv**2)*gaussian
+                t = t+self.tau[k]
+
+            #pulse = self.scaling*gaussian+1j*beta*(-(t-T/2)/Tv**2)*gaussian
+            return self._apply_bounds_and_offset(pulse)"""
+
+
+
+
+
+
+    
+        
+    
+    #dgaussian = derivative(gaussian,x,dx=1e-6)
+    #return gaussian+1j*beta*(-(x-T/2)/sigma**2)*gaussian
+
+        
+        
+        #idx = np.where((t >= risefall) & (t < risefall + Tw))
+        #idx = np.where((t >= risefall) & (t < T - risefall))
+        #idx = np.where(risefall<=t<(risefall + Tw))
+        #t2 =
+        #t1=risefall+Tw
+        #for k in range(self.num_tslots):
+
+        	#y=signal.convolve(np.exp(-0.5*t**2),(np.heaviside(t,risefall)-np.heaviside(t,t1)))
+        #    m=risefall<=t<(risefall+Tw)
+        #    y = signal.convolve(np.exp(-0.5*t**2),signal.boxcar())
+        #	pulse[k] = self.scaling*y
+        #	t = t + self.tau[k]
+            
+
+            #y=np.convolve(np.exp(-t**2),(unit_step(risefall,t)-unit_step((risefall+width),t)))
+            
+            #pulse[k] = self.scaling*Tm*np.exp(-(0.5)*(t-risefall/2)**2/(Tv**2))
+            #t = t + self.tau[k]
+            #if (0.0<=t<risefall):
+            #    pulse[k] = self.scaling*Tm*np.exp(-(0.5)*(t-(risefall/2.))**2/(Tv**2))
+            #    t = t + self.tau[k]
+            #if(risefall<=t<(risefall+Tw)):
+            #    pulse[k] = self.scaling*Tm
+            #    t = t + self.tau[k]
+            #if((risefall+Tw)<=t<T):
+            #    pulse[k] = self.scaling*Tm*np.exp(-(0.5)*(t-(risefall+Tw)/2.)**2/(Tv**2))
+            #    t = t + self.tau[k] 
+                 
+                    
+
+        #for i in range(np.where(t>=0),np.where(t<risefall)):
+        #    pulse[i] = self.scaling*Tm*np.exp(-(1/2)*(t-risefall/2)**2/(Tv**2))
+
+
+        #for i in range(np.where(t>=risefall),np.where(t<risefall+Tw)):
+        #    pulse[i] = self.scaling*Tm
+
+            #pulse[idx] = self.scaling*Tm
+        #elif risefall<-t<risefall+Tw:
+        #	pulse = self.scaling*Tm 
+        #elif risefall+width<=t<T:
+        #for i in range(np.where(t>=risefall+Tw),np.where(t<T)):
+        #    pulse[i] = self.scaling*amp*np.exp(-0.5*(t-((risefall+Tw)*0.5)**2/(Tv**2))) 			
+
+        
 
 ### The following are pulse generators for the CRAB algorithm ###
 # AJGP 2015-05-14: 
